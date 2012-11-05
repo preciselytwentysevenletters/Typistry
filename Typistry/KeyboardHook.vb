@@ -1,7 +1,7 @@
 ﻿Imports System.Runtime.InteropServices
 
 Public Module KeyboardHook
-    <DllImport("user32.dll")>
+    <DllImport("user32.dll", SetLastError:=True)>
     Public Function SetWindowsHookEx(idHook As Integer, HookProc As KBDLLHookProc, hInstance As IntPtr, dwThreadId As UShort) As IntPtr
 
     End Function

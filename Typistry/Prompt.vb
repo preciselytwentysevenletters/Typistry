@@ -2,25 +2,35 @@
 Imports System.Reflection
 
 Public Class Prompt
-    Private hook As IntPtr
-    Private hookDelegate As New KBDLLHookProc(AddressOf KeyHook)
     Private isVisible As Boolean = False
     Private currentAnimation As Threading.Timer
+    Private previousForeground As IntPtr
 
     <DllImport("user32.dll")>
     Private Shared Function SetForegroundWindow(hWnd As IntPtr) As Integer
 
     End Function
 
+    <DllImport("user32.dll")>
+    Private Shared Function GetForegroundWindow() As IntPtr
+
+    End Function
+
+#Region "Key Hook"
+    Private hook As IntPtr
+    Private hookDelegate As New KBDLLHookProc(AddressOf KeyHook)
+
     Private Sub Prompt_Load(sender As Object, e As EventArgs) Handles Me.Load
+        ' Position the form:
         Dim workingArea As Rectangle = My.Computer.Screen.WorkingArea
 
         Me.Bounds = New Rectangle(workingArea.X, workingArea.Y, workingArea.Width, 1)
         Me.Opacity = 0
 
+        ' Create the key hook:
         Dim hookAssembly As Assembly
 
-        ' The Visual Studio hosting process interferes with this =(
+        ' If in debugging mode, the assembly we need is that of the Visual Studio hosting process.
 #If DEBUG Then
         hookAssembly = Assembly.GetCallingAssembly()
 #Else
@@ -30,7 +40,7 @@ Public Class Prompt
         hook = KeyboardHook.SetWindowsHookEx(KeyboardHook.WH_KEYBOARD_LL, hookDelegate, Marshal.GetHINSTANCE(hookAssembly.Modules.First()), 0)
 
         If hook = IntPtr.Zero Then
-            Throw New ApplicationException("Failed to set key hook.")
+            Throw New ApplicationException("Failed to set key hook: " & Marshal.GetLastWin32Error())
         End If
     End Sub
 
@@ -42,6 +52,7 @@ Public Class Prompt
                 Dim keyCode As Keys = CType(CType(Marshal.PtrToStructure(lParam, GetType(KeyboardHook.KBDLLHOOKSTRUCT)), KeyboardHook.KBDLLHOOKSTRUCT).vkCode, Keys)
 
                 If keyCode = Keys.CapsLock Then
+                    ' Toggle the command bar:
                     isVisible = Not isVisible
 
                     If currentAnimation IsNot Nothing Then currentAnimation.Dispose()
@@ -57,7 +68,9 @@ Public Class Prompt
                                                           Me.Height = CInt(currentHeight + (40 - currentHeight) * t)
                                                       End Sub, 0.2)
 
+                        previousForeground = GetForegroundWindow()
                         SetForegroundWindow(Me.Handle)
+                        Me.Command.Focus()
                     Else
                         currentAnimation = Me.Animate(Sub(t)
                                                           t = EaseInOut(t)
@@ -65,9 +78,11 @@ Public Class Prompt
                                                           Me.Opacity = currentOpacity * (1 - t)
                                                           Me.Height = CInt(currentHeight * (1 - t))
                                                       End Sub, 0.2)
+
+                        SetForegroundWindow(previousForeground)
                     End If
 
-                    ' Finally, prevent Caps Lock from being turned on:
+                    ' Prevent Caps Lock from being turned on:
                     Return 1
                 End If
             End If
@@ -90,5 +105,17 @@ Public Class Prompt
         Finally
             MyBase.Dispose(disposing)
         End Try
+    End Sub
+#End Region
+
+    Private Sub Command_KeyDown(sender As Object, e As KeyEventArgs) Handles Command.KeyDown
+        If e.KeyCode = Keys.Enter Then
+            If Me.Command.Text = "quit" Then
+                Me.Close()
+            End If
+
+            Me.Command.Clear()
+            e.SuppressKeyPress = True
+        End If
     End Sub
 End Class
