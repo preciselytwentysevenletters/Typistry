@@ -1,0 +1,2 @@
+*.sln    merge=union
+*.vbproj merge=union
